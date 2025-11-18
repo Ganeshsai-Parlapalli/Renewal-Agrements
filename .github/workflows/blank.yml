@@ -1,0 +1,49 @@
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily at 6:00 AM IST → reminders for 1–5 days before expiry
+    - cron: '30 0 * * *'  # 6:00 AM IST (00:30 UTC)
+
+    # Hourly → alerts for items expiring today
+    - cron: '30 * * * *'  # every hour UTC
+
+jobs:
+  renewal-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas openpyxl requests gdown
+
+      - name: Run Renewal Agreements script
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          RECIPIENT_DEFAULT: ${{ secrets.RECIPIENT_DEFAULT }}
+          GDRIVE_FILE_ID: ${{ secrets.GDRIVE_FILE_ID }}
+          DOWNLOAD_PATH: Renewal.xlsx
+          LOG_FILE: renewal.log
+          REMINDER_HOUR: "6"  # used inside script for daily reminders
+        run: |
+          set -euo pipefail
+          python -u Renewal_Agreements.py 2>&1 | tee "$LOG_FILE" || true
+
+      - name: Upload artifacts (Excel + logs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renewal-artifacts
+          path: |
+            Renewal.xlsx
+            renewal.log
